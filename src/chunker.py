@@ -63,11 +63,16 @@ def split_text(
         # Move backward to preserve overlapping context
         next_start = end - chunk_overlap
 
+        # Move forward to the beginning of the next word
+        while next_start < end and not text[next_start].isspace():
+            next_start += 1
+
+        # Skip whitespace
         while next_start < end and text[next_start].isspace():
             next_start += 1
 
         start = next_start
-
+        
     return chunks
 
 

@@ -20,7 +20,7 @@ def clean_text(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
 
     # Remove spaces before punctuation
-    text = re.sub(r"\s+([،؛.!؟:])", r"\1", text)
+    text = re.sub(r"\s+([،؛,.!?;:])", r"\1", text)
 
     # Add space between Arabic letters and numbers
     text = re.sub(r"(?<=[\u0600-\u06FF])(?=\d)", " ", text)

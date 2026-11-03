@@ -1,3 +1,5 @@
+import pytest
+
 from src.embeddings.base import BaseEmbeddingProvider
 from src.embeddings.embedding_service import EmbeddingService
 
@@ -14,33 +16,49 @@ class MockEmbeddingProvider(BaseEmbeddingProvider):
         ]
 
 
-provider = MockEmbeddingProvider()
-
-embedding_service = EmbeddingService(provider)
-
-
-# Test a single text
-vector = embedding_service.generate_embedding(
-    "الدراسة في الخارج"
-)
-
-print("Single Embedding:", vector)
-print("Vector Dimensions:", len(vector))
+@pytest.fixture
+def embedding_service():
+    provider = MockEmbeddingProvider()
+    return EmbeddingService(provider)
 
 
-# Test multiple texts
-vectors = embedding_service.generate_embeddings([
-    "الدراسة في الخارج",
-    "المنح الدراسية",
-    "الأوراق المطلوبة للسفر"
-])
+def test_generate_embedding_returns_vector(embedding_service):
+    vector = embedding_service.generate_embedding("الدراسة في الخارج")
 
-print("\nBatch Embeddings:", vectors)
-print("Number of Vectors:", len(vectors))
+    assert isinstance(vector, list)
+    assert len(vector) == 3
 
 
-# Test empty input
-try:
-    embedding_service.generate_embedding("   ")
-except ValueError as error:
-    print("\nEmpty Text Test:", error)
+def test_generate_embedding_returns_float_values(embedding_service):
+    vector = embedding_service.generate_embedding("Scholarships")
+
+    assert all(isinstance(value, float) for value in vector)
+
+
+def test_generate_embeddings_returns_correct_number(embedding_service):
+    texts = [
+        "الدراسة في الخارج",
+        "المنح الدراسية",
+        "الأوراق المطلوبة للسفر"
+    ]
+
+    vectors = embedding_service.generate_embeddings(texts)
+
+    assert len(vectors) == len(texts)
+
+
+def test_generate_embeddings_returns_empty_list(embedding_service):
+    assert embedding_service.generate_embeddings([]) == []
+
+
+def test_generate_embedding_rejects_empty_text(embedding_service):
+    with pytest.raises(ValueError):
+        embedding_service.generate_embedding("   ")
+
+
+def test_generate_embeddings_rejects_empty_text(embedding_service):
+    with pytest.raises(ValueError):
+        embedding_service.generate_embeddings([
+            "الدراسة في الخارج",
+            "   "
+        ])

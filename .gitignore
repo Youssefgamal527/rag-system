@@ -4,7 +4,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
-# Virtual Environment
+# Virtual Environments
 .venv/
 venv/
 env/
@@ -12,6 +12,7 @@ env/
 # Environment Variables
 .env
 .env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -30,6 +31,10 @@ storage/
 # Model Files
 models/
 *.gguf
+
+# Processed Knowledge
+knowledge/processed/*
+!knowledge/processed/.gitkeep
 
 # Temporary Files
 tmp/

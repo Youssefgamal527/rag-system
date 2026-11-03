@@ -1,62 +1,78 @@
-from src.pdf_loader import load_pdf
-from src.chunker import create_chunks
-from src.chunker import split_text
+import pytest
+
+from src.chunker import split_text, create_chunks
 
 
-PDF_PATH = "knowledge/documents/guide.pdf"
-
-pages = load_pdf(PDF_PATH)
-
-chunks = create_chunks(
-    pages,
-    source="guide.pdf"
-)
-
-print("\n--- Chunk Statistics ---")
-
-chunk_lengths = [len(chunk["text"]) for chunk in chunks]
-
-print(f"Total Pages: {len(pages)}")
-print("Total Chunks:", len(chunks))
-print("Average Length:", sum(chunk_lengths) / len(chunk_lengths))
-print("Maximum Length:", max(chunk_lengths))
-print("Minimum Length:", min(chunk_lengths))
+def test_split_text_returns_empty_list_for_empty_text():
+    assert split_text("") == []
+    assert split_text("   ") == []
 
 
-for chunk in chunks[:3]:
+def test_split_text_respects_chunk_size():
+    text = " ".join(f"word{i}" for i in range(500))
 
-    print("\n--------------------------")
-    print("Chunk ID:", chunk["chunk_id"])
-    print("Metadata:", chunk["metadata"])
-    print("Text:", chunk["text"][:300])
+    chunks = split_text(
+        text,
+        chunk_size=100,
+        chunk_overlap=20
+    )
+
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 100 for chunk in chunks)
 
 
-# Create sample text
-sample_text = " ".join(
-    f"word{i}" for i in range(1000)
-)
+def test_split_text_preserves_overlap():
+    text = " ".join(f"word{i}" for i in range(100))
 
-sample_chunks = split_text(
-    sample_text,
-    chunk_size=1800,
-    chunk_overlap=300
-)
+    chunks = split_text(
+        text,
+        chunk_size=100,
+        chunk_overlap=20
+    )
 
-print("\n--- Overlap Test ---")
+    assert len(chunks) > 1
 
-print("Sample Chunks:", len(sample_chunks))
+    for previous, current in zip(chunks, chunks[1:]):
+        previous_words = previous.split()
+        current_words = current.split()
 
-for i in range(len(sample_chunks) - 1):
+        assert previous_words[-2:] == current_words[:2]
 
-    previous = sample_chunks[i]
-    current = sample_chunks[i + 1]
 
-    overlap = 0
+def test_split_text_rejects_invalid_chunk_size():
+    with pytest.raises(ValueError):
+        split_text("Hello World", chunk_size=0)
 
-    for size in range(min(len(previous), len(current)), 0, -1):
 
-        if previous[-size:] == current[:size]:
-            overlap = size
-            break
+def test_split_text_rejects_invalid_overlap():
+    with pytest.raises(ValueError):
+        split_text("Hello World", chunk_size=100, chunk_overlap=100)
 
-    print(f"Chunks {i+1} & {i+2}: Overlap = {overlap} characters")
+
+def test_create_chunks_returns_expected_structure():
+    pages = [
+        {"page": 1, "text": "First page content " * 20},
+        {"page": 2, "text": "Second page content " * 20}
+    ]
+
+    chunks = create_chunks(pages, source="guide.pdf")
+
+    assert len(chunks) > 0
+
+    for chunk in chunks:
+        assert "chunk_id" in chunk
+        assert "text" in chunk
+        assert "metadata" in chunk
+
+
+def test_create_chunks_preserves_metadata():
+    pages = [
+        {"page": 3, "text": "Sample content " * 20}
+    ]
+
+    chunks = create_chunks(pages, source="guide.pdf")
+
+    assert chunks[0]["chunk_id"] == "guide.pdf_p3_c1"
+    assert chunks[0]["metadata"]["source"] == "guide.pdf"
+    assert chunks[0]["metadata"]["page"] == 3
+    assert chunks[0]["metadata"]["chunk_index"] == 1

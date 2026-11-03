@@ -1,11 +1,32 @@
+import pytest
+
 from src.pdf_loader import load_pdf
 
 PDF_PATH = "knowledge/documents/guide.pdf"
 
-pages = load_pdf(PDF_PATH)
 
-print(f"Total Pages: {len(pages)}")
+def test_load_pdf_returns_pages():
+    pages = load_pdf(PDF_PATH)
 
-for page in pages[:3]:
-    print(f"\n--- Page {page['page']} ---")
-    print(page["text"][:500])
+    assert isinstance(pages, list)
+    assert len(pages) > 0
+
+
+def test_load_pdf_preserves_page_numbers():
+    pages = load_pdf(PDF_PATH)
+
+    assert pages[0]["page"] == 1
+
+
+def test_load_pdf_returns_text():
+    pages = load_pdf(PDF_PATH)
+
+    for page in pages:
+        assert "page" in page
+        assert "text" in page
+        assert isinstance(page["text"], str)
+
+
+def test_load_pdf_file_not_found():
+    with pytest.raises(FileNotFoundError):
+        load_pdf("nonexistent.pdf")

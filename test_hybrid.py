@@ -1,106 +1,138 @@
-from src.pdf_loader import load_pdf
-from src.chunker import create_chunks
+import pytest
 
-from src.embeddings.base import BaseEmbeddingProvider
-from src.embeddings.embedding_service import EmbeddingService
-
-from src.retrieval.bm25_retriever import BM25Retriever
-from src.retrieval.dense_retriever import DenseRetriever
-from src.retrieval.reranker import RRFFusion
 from src.retrieval.hybrid_retriever import HybridRetriever
+from src.retrieval.reranker import RRFFusion
 
 
-# 1. Mock Embedding Provider
-class MockEmbeddingProvider(BaseEmbeddingProvider):
+class MockBM25Retriever:
 
-    def embed(self, text: str) -> list[float]:
-        return [0.1, 0.2, 0.3]
+    def search(self, query: str, limit: int = 5) -> list[dict]:
 
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        return [
-            [0.1, 0.2, 0.3]
-            for _ in texts
+        results = [
+            {"chunk_id": "A", "text": "Document A"},
+            {"chunk_id": "B", "text": "Document B"},
+            {"chunk_id": "C", "text": "Document C"}
         ]
 
+        return results[:limit]
 
-# 2. Mock Vector Store
-class MockVectorStore:
 
-    def __init__(self, chunks: list[dict]):
-        self.chunks = chunks
+class MockDenseRetriever:
 
-    def search(
-        self,
-        query_embedding: list[float],
-        limit: int = 5
-    ) -> list[dict]:
+    def search(self, query: str, limit: int = 5) -> list[dict]:
 
-        return [
-            {
-                **chunk,
-                "score": 0.9
-            }
-            for chunk in self.chunks[5:5 + limit]
+        results = [
+            {"chunk_id": "B", "text": "Document B"},
+            {"chunk_id": "D", "text": "Document D"},
+            {"chunk_id": "A", "text": "Document A"}
         ]
 
+        return results[:limit]
 
-# 3. Load PDF and Create Chunks
-pages = load_pdf("knowledge/documents/guide.pdf")
 
-chunks = create_chunks(
-    pages,
-    source="guide.pdf"
+@pytest.fixture
+def hybrid_retriever():
+
+    return HybridRetriever(
+        bm25_retriever=MockBM25Retriever(),
+        dense_retriever=MockDenseRetriever(),
+        rrf=RRFFusion(k=60)
+    )
+
+
+def test_hybrid_search_returns_results(hybrid_retriever):
+
+    results = hybrid_retriever.search(
+        query="Scholarships",
+        limit=5
+    )
+
+    assert isinstance(results, list)
+    assert len(results) == 4
+
+
+def test_hybrid_search_merges_results(hybrid_retriever):
+
+    results = hybrid_retriever.search(
+        query="Scholarships"
+    )
+
+    chunk_ids = {
+        result["chunk_id"]
+        for result in results
+    }
+
+    assert chunk_ids == {"A", "B", "C", "D"}
+
+
+def test_hybrid_search_ranks_common_documents_first(
+    hybrid_retriever
+):
+
+    results = hybrid_retriever.search(
+        query="Scholarships"
+    )
+
+    assert results[0]["chunk_id"] == "B"
+    assert results[1]["chunk_id"] == "A"
+
+
+def test_hybrid_search_returns_rrf_scores(hybrid_retriever):
+
+    results = hybrid_retriever.search(
+        query="Scholarships"
+    )
+
+    for result in results:
+        assert "rrf_score" in result
+        assert result["rrf_score"] > 0
+
+
+def test_hybrid_search_respects_limit(hybrid_retriever):
+
+    results = hybrid_retriever.search(
+        query="Scholarships",
+        limit=2
+    )
+
+    assert len(results) == 2
+
+
+def test_hybrid_search_passes_retrieval_limit(hybrid_retriever):
+
+    results = hybrid_retriever.search(
+        query="Scholarships",
+        limit=2,
+        retrieval_limit=1
+    )
+
+    assert len(results) == 2
+
+
+def test_hybrid_search_rejects_empty_query(hybrid_retriever):
+
+    with pytest.raises(ValueError):
+        hybrid_retriever.search(query="   ")
+
+
+@pytest.mark.parametrize(
+    "limit,retrieval_limit",
+    [
+        (0, 10),
+        (-1, 10),
+        (5, 0),
+        (5, -1)
+    ]
 )
+def test_hybrid_search_rejects_invalid_limits(
+    hybrid_retriever,
+    limit,
+    retrieval_limit
+):
 
-
-# 4. Initialize BM25
-bm25_retriever = BM25Retriever()
-bm25_retriever.index_documents(chunks)
-
-
-# 5. Initialize Dense Retriever
-embedding_service = EmbeddingService(
-    MockEmbeddingProvider()
-)
-
-mock_vector_store = MockVectorStore(chunks)
-
-dense_retriever = DenseRetriever(
-    embedding_service=embedding_service,
-    vector_store=mock_vector_store
-)
-
-
-# 6. Initialize RRF
-rrf = RRFFusion(k=60)
-
-
-# 7. Initialize Hybrid Retriever
-hybrid_retriever = HybridRetriever(
-    bm25_retriever=bm25_retriever,
-    dense_retriever=dense_retriever,
-    rrf=rrf
-)
-
-
-# 8. Search
-query = "المنح الدراسية والأوراق المطلوبة"
-
-results = hybrid_retriever.search(
-    query=query,
-    limit=5,
-    retrieval_limit=10
-)
-
-
-# 9. Display Results
-print("\n--- Hybrid Search Results ---")
-
-for index, result in enumerate(results, start=1):
-
-    print(f"\nRank: {index}")
-    print("Chunk ID:", result["chunk_id"])
-    print("Page:", result["metadata"]["page"])
-    print("RRF Score:", round(result["rrf_score"], 6))
-    print("Text:", result["text"][:250])
-    
+    with pytest.raises(ValueError):
+        hybrid_retriever.search(
+            query="Scholarships",
+            limit=limit,
+            retrieval_limit=retrieval_limit
+        )
