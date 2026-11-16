@@ -64,7 +64,7 @@ class BudgetExtractor:
             "currency": "EUR" if country == "ألمانيا" else None,
             "monthly_living": None,
             "public_semester_contribution": None,
-            "annual_public_tuition": None,
+            "annual_public_semester_contribution": None,
             "annual_private_tuition": None,
             "sources": {}
         }
@@ -116,13 +116,13 @@ class BudgetExtractor:
         if result["public_semester_contribution"]:
             contribution = result["public_semester_contribution"]
 
-            result["annual_public_tuition"] = {
+            result["annual_public_semester_contribution"] = {
                 "min": contribution["min"] * 2,
                 "max": contribution["max"] * 2,
                 "note": "Calculated from two semesters"
             }
 
-            result["sources"]["annual_public_tuition"] = (
+            result["sources"]["annual_public_semester_contribution"] = (
                 result["sources"]["public_semester_contribution"]
             )
 

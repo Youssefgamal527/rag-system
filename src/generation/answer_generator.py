@@ -1,3 +1,5 @@
+import json
+
 
 class AnswerGenerator:
 
@@ -54,10 +56,19 @@ class AnswerGenerator:
         "public tuition"
     ]
 
-    def __init__(self, retriever, prompt_builder, llm):
+    def __init__(
+        self,
+        retriever,
+        prompt_builder,
+        llm,
+        budget_extractor=None,
+        budget_calculator=None
+    ):
         self.retriever = retriever
         self.prompt_builder = prompt_builder
         self.llm = llm
+        self.budget_extractor = budget_extractor
+        self.budget_calculator = budget_calculator
 
     def _detect_countries(self, query: str) -> list[str]:
         query_lower = query.lower()
@@ -123,8 +134,7 @@ class AnswerGenerator:
                     selected.append(chunk)
 
         return self._unique_chunks(selected)
-    
-    
+
     def _filter_context(
         self,
         query: str,
@@ -133,9 +143,6 @@ class AnswerGenerator:
 
         countries = self._detect_countries(query)
 
-        # Total-budget questions:
-        # Keep the general first-year budget framework,
-        # country-specific tuition details, and country comparison row.
         if self._is_total_budget_query(query):
             if "ألمانيا" in countries:
                 relevant_pages = {7, 24, 38}
@@ -154,7 +161,6 @@ class AnswerGenerator:
         if not countries:
             return chunks
 
-        # Tuition questions: prefer country comparison rows.
         if (
             self._is_private_tuition_query(query)
             or self._is_public_tuition_query(query)
@@ -162,12 +168,145 @@ class AnswerGenerator:
             selected = self._filter_country_rows(countries, chunks)
             return selected if selected else chunks
 
-        # Monthly living questions.
         if self._is_monthly_living_query(query):
             selected = self._filter_country_rows(countries, chunks)
             return selected if selected else chunks
 
         return chunks
+
+    def _build_budget_estimates(
+        self,
+        query: str,
+        chunks: list[dict]
+    ) -> dict | None:
+
+        countries = self._detect_countries(query)
+
+        if not self._is_total_budget_query(query):
+            return None
+
+        if "ألمانيا" not in countries:
+            return None
+
+        if not self.budget_extractor or not self.budget_calculator:
+            return None
+
+        extracted = self.budget_extractor.extract(
+            chunks=chunks,
+            country="ألمانيا"
+        )
+
+        living = extracted.get("monthly_living")
+        public_fees = extracted.get(
+            "annual_public_semester_contribution"
+        )
+        private_tuition = extracted.get("annual_private_tuition")
+
+        if not living or not public_fees or not private_tuition:
+            return None
+
+        monthly_living = (
+            living["min"],
+            living["max"]
+        )
+
+        public_result = self.budget_calculator.calculate(
+            monthly_living=monthly_living,
+            annual_tuition=(0, 0),
+            tuition_type="public",
+            annual_mandatory_fees=(
+                public_fees["min"],
+                public_fees["max"]
+            )
+        )
+
+        private_result = self.budget_calculator.calculate(
+            monthly_living=monthly_living,
+            annual_tuition=(
+                private_tuition["min"],
+                private_tuition["max"]
+            ),
+            tuition_type="private"
+        )
+
+        return {
+            "country": "ألمانيا",
+            "currency": extracted["currency"],
+            "public_university": public_result,
+            "private_university": private_result,
+            "extraction_sources": extracted["sources"]
+        }
+
+    def _format_budget_answer(self, budget: dict) -> str:
+
+        currency = budget.get("currency", "EUR")
+
+        def format_range(values):
+            minimum = values["min"]
+            maximum = values["max"]
+            return f"{minimum:,.0f} - {maximum:,.0f} {currency}"
+
+        public = budget["public_university"]
+        private = budget["private_university"]
+
+        return f"""
+إجمالي ميزانية السنة الأولى للدراسة والمعيشة في {budget['country']}:
+
+**أولًا: الجامعات الحكومية**
+
+- مصروفات المعيشة السنوية:
+  {format_range(public['annual_living'])}
+
+- الرسوم الدراسية السنوية:
+  {format_range(public['annual_tuition'])}
+
+- الرسوم الإلزامية السنوية:
+  {format_range(public['annual_mandatory_fees'])}
+
+- إجمالي ميزانية السنة الأولى:
+  {format_range(public['partial_first_year_total'])}
+
+**ثانيًا: الجامعات الخاصة**
+
+- مصروفات المعيشة السنوية:
+  {format_range(private['annual_living'])}
+
+- الرسوم الدراسية السنوية:
+  {format_range(private['annual_tuition'])}
+
+- الرسوم الإلزامية السنوية:
+  {format_range(private['annual_mandatory_fees'])}
+
+- إجمالي ميزانية السنة الأولى:
+  {format_range(private['partial_first_year_total'])}
+
+ملاحظة: هذه تقديرات أساسية، ولا تشمل المصروفات الإضافية غير المحتسبة أو تذاكر السفر. وقد تختلف الرسوم في بعض الجامعات الحكومية حسب الولاية والبرنامج الدراسي.
+""".strip()
+
+    def _build_budget_prompt(
+        self,
+        prompt: str,
+        budget_estimates: dict
+    ) -> str:
+
+        budget_context = json.dumps(
+            budget_estimates,
+            ensure_ascii=False,
+            indent=2
+        )
+
+        return prompt + f"""
+
+==================================================
+CALCULATED BUDGET DATA
+==================================================
+
+{budget_context}
+
+Use the calculated data only for financial questions.
+Do not modify or invent financial values.
+Answer in the same language as the user's question.
+"""
 
     def generate(
         self,
@@ -189,7 +328,8 @@ class AnswerGenerator:
             return {
                 "answer": "No relevant information was found in the documents.",
                 "sources": [],
-                "retrieved_chunks": []
+                "retrieved_chunks": [],
+                "budget_estimates": None
             }
 
         selected_chunks = self._filter_context(
@@ -197,12 +337,19 @@ class AnswerGenerator:
             chunks=retrieved_chunks
         )
 
-        prompt = self.prompt_builder.build(
+        budget_estimates = self._build_budget_estimates(
             query=query,
-            retrieved_chunks=selected_chunks
+            chunks=selected_chunks
         )
 
-        answer = self.llm.generate(prompt)
+        if budget_estimates:
+            answer = self._format_budget_answer(budget_estimates)
+        else:
+            prompt = self.prompt_builder.build(
+                query=query,
+                retrieved_chunks=selected_chunks
+            )
+            answer = self.llm.generate(prompt)
 
         sources = []
         seen_sources = set()
@@ -228,5 +375,6 @@ class AnswerGenerator:
         return {
             "answer": answer,
             "sources": sources,
-            "retrieved_chunks": selected_chunks
+            "retrieved_chunks": selected_chunks,
+            "budget_estimates": budget_estimates
         }

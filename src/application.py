@@ -12,6 +12,8 @@ from src.retrieval.reranker import RRFFusion
 from src.generation.ollama_llm import OllamaLLM
 from src.generation.prompt_builder import PromptBuilder
 from src.generation.answer_generator import AnswerGenerator
+from src.generation.budget_extractor import BudgetExtractor
+from src.generation.budget_calculator import BudgetCalculator
 
 from src.ingestion_pipeline import IngestionPipeline
 
@@ -59,10 +61,16 @@ class RAGApplication:
 
         self.prompt_builder = PromptBuilder()
 
+        # Budget components
+        self.budget_extractor = BudgetExtractor()
+        self.budget_calculator = BudgetCalculator()
+
         self.answer_generator = AnswerGenerator(
             retriever=self.hybrid_retriever,
             prompt_builder=self.prompt_builder,
-            llm=self.llm
+            llm=self.llm,
+            budget_extractor=self.budget_extractor,
+            budget_calculator=self.budget_calculator
         )
 
         # 5. Ingestion component

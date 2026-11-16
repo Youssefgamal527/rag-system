@@ -10,7 +10,8 @@ class BudgetCalculator:
         monthly_living: tuple[float, float],
         annual_tuition: tuple[float, float],
         tuition_type: str,
-        one_time_expenses: tuple[float, float] | None = None
+        one_time_expenses: tuple[float, float] | None = None,
+        annual_mandatory_fees: tuple[float, float] = (0, 0)
     ) -> dict:
 
         if len(monthly_living) != 2:
@@ -19,11 +20,15 @@ class BudgetCalculator:
         if len(annual_tuition) != 2:
             raise ValueError("Annual tuition must contain min and max")
 
+        if len(annual_mandatory_fees) != 2:
+            raise ValueError("Annual mandatory fees must contain min and max")
+
         if one_time_expenses is not None and len(one_time_expenses) != 2:
             raise ValueError("One-time expenses must contain min and max")
 
         living_min, living_max = monthly_living
         tuition_min, tuition_max = annual_tuition
+        fees_min, fees_max = annual_mandatory_fees
 
         if one_time_expenses is None:
             expenses_min = 0
@@ -36,6 +41,7 @@ class BudgetCalculator:
         values = [
             living_min, living_max,
             tuition_min, tuition_max,
+            fees_min, fees_max,
             expenses_min, expenses_max
         ]
 
@@ -48,14 +54,28 @@ class BudgetCalculator:
         if tuition_min > tuition_max:
             raise ValueError("Tuition minimum cannot exceed maximum")
 
+        if fees_min > fees_max:
+            raise ValueError("Mandatory fees minimum cannot exceed maximum")
+
         if expenses_min > expenses_max:
             raise ValueError("Expenses minimum cannot exceed maximum")
 
         annual_living_min = living_min * 12
         annual_living_max = living_max * 12
 
-        total_min = annual_living_min + tuition_min + expenses_min
-        total_max = annual_living_max + tuition_max + expenses_max
+        total_min = (
+            annual_living_min
+            + tuition_min
+            + fees_min
+            + expenses_min
+        )
+
+        total_max = (
+            annual_living_max
+            + tuition_max
+            + fees_max
+            + expenses_max
+        )
 
         return {
             "tuition_type": tuition_type,
@@ -67,6 +87,10 @@ class BudgetCalculator:
             "annual_tuition": {
                 "min": tuition_min,
                 "max": tuition_max
+            },
+            "annual_mandatory_fees": {
+                "min": fees_min,
+                "max": fees_max
             },
             "one_time_expenses": {
                 "min": expenses_min,
