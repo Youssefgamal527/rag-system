@@ -164,3 +164,80 @@ def test_search_rejects_invalid_limit(
             query_embedding=sample_embeddings[0],
             limit=0
         )
+
+def test_replacing_source_removes_old_chunks(store):
+    old_chunks = [
+        {
+            "chunk_id": f"guide.pdf_p1_c{i}",
+            "text": f"Old text {i}",
+            "metadata": {
+                "source": "guide.pdf",
+                "page": 1,
+                "chunk_index": i
+            }
+        }
+        for i in range(1, 4)
+    ]
+
+    new_chunks = [
+        {
+            "chunk_id": "guide.pdf_p1_c1",
+            "text": "Updated text",
+            "metadata": {
+                "source": "guide.pdf",
+                "page": 1,
+                "chunk_index": 1
+            }
+        }
+    ]
+
+    old_embeddings = [[1.0] + [0.0] * 1023 for _ in old_chunks]
+    new_embeddings = [[1.0] + [0.0] * 1023]
+
+    store.add_chunks(old_chunks, old_embeddings)
+
+    store.replace_source("guide.pdf", new_chunks, new_embeddings)
+
+    results = store.get_all_chunks()
+
+    assert len(results) == 1
+    assert results[0]["text"] == "Updated text"
+
+
+def test_replacing_source_preserves_other_sources(store):
+    guide_chunks = [
+        {
+            "chunk_id": "guide.pdf_p1_c1",
+            "text": "Guide content",
+            "metadata": {
+                "source": "guide.pdf",
+                "page": 1,
+                "chunk_index": 1
+            }
+        }
+    ]
+
+    other_chunks = [
+        {
+            "chunk_id": "other.pdf_p1_c1",
+            "text": "Other content",
+            "metadata": {
+                "source": "other.pdf",
+                "page": 1,
+                "chunk_index": 1
+            }
+        }
+    ]
+
+    embedding = [[1.0] + [0.0] * 1023]
+
+    store.add_chunks(guide_chunks, embedding)
+    store.add_chunks(other_chunks, embedding)
+
+    store.replace_source("guide.pdf", [], [])
+
+    results = store.get_all_chunks()
+
+    assert len(results) == 1
+    assert results[0]["metadata"]["source"] == "other.pdf"
+        

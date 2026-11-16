@@ -1,4 +1,6 @@
+
 import re
+import unicodedata
 
 from rank_bm25 import BM25Okapi
 
@@ -6,14 +8,33 @@ from rank_bm25 import BM25Okapi
 class BM25Retriever:
 
     def __init__(self):
-
         self.documents = []
         self.bm25 = None
 
     @staticmethod
+    def normalize_arabic(text: str) -> str:
+
+        text = unicodedata.normalize("NFKC", text)
+        text = text.lower()
+
+        # Remove Arabic diacritics
+        text = re.sub(r"[\u064B-\u065F\u0670]", "", text)
+
+        # Remove Tatweel
+        text = text.replace("ـ", "")
+
+        # Normalize Arabic letters
+        text = re.sub(r"[إأآٱ]", "ا", text)
+        text = text.replace("ى", "ي")
+        text = text.replace("ؤ", "و")
+        text = text.replace("ئ", "ي")
+
+        return text
+
+    @staticmethod
     def tokenize(text: str) -> list[str]:
 
-        text = text.lower()
+        text = BM25Retriever.normalize_arabic(text)
 
         tokens = re.findall(
             r"[\u0600-\u06FF]+|[a-z0-9]+",
@@ -25,7 +46,9 @@ class BM25Retriever:
     def index_documents(self, chunks: list[dict]) -> None:
 
         if not chunks:
-            raise ValueError("Chunks cannot be empty")
+            self.documents = []
+            self.bm25 = None
+            return
 
         self.documents = chunks
 
@@ -54,8 +77,7 @@ class BM25Retriever:
         tokenized_query = self.tokenize(query)
 
         scores = self.bm25.get_scores(tokenized_query)
-        
-        # Keep only documents with positive scores
+
         matched_indices = [
             index
             for index, score in enumerate(scores)
@@ -71,7 +93,6 @@ class BM25Retriever:
         results = []
 
         for index in ranked_indices:
-
             chunk = self.documents[index]
 
             results.append({

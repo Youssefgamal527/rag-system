@@ -41,8 +41,10 @@ class IngestionPipeline:
 
         embeddings = self.embedding_service.generate_embeddings(texts)
 
+                
         # 4. Store chunks and embeddings in Qdrant
-        self.vector_store.add_chunks(
+        self.vector_store.replace_source(
+            source,
             chunks,
             embeddings
         )

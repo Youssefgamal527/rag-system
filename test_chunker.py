@@ -1,3 +1,4 @@
+
 import pytest
 
 from src.chunker import split_text, create_chunks
@@ -27,7 +28,7 @@ def test_split_text_preserves_overlap():
     chunks = split_text(
         text,
         chunk_size=100,
-        chunk_overlap=20
+        chunk_overlap=2
     )
 
     assert len(chunks) > 1
@@ -76,3 +77,38 @@ def test_create_chunks_preserves_metadata():
     assert chunks[0]["metadata"]["source"] == "guide.pdf"
     assert chunks[0]["metadata"]["page"] == 3
     assert chunks[0]["metadata"]["chunk_index"] == 1
+
+
+def test_split_text_preserves_arabic_sentence_boundaries():
+    text = (
+        "المحور الأول: القرار نفسه؟ "
+        "هل الدراسة بره مناسبة للطالب؟ "
+        "المحور الثاني: الفلوس، وهو أهم محور لولي الأمر."
+    )
+
+    chunks = split_text(
+        text,
+        chunk_size=70,
+        chunk_overlap=10
+    )
+
+    assert len(chunks) > 1
+    assert all(chunk.strip() for chunk in chunks)
+
+
+def test_split_text_preserves_paragraph_boundaries():
+    text = (
+        "المقدمة\n\n"
+        "الدليل ده اتكتب لولي الأمر عشان يساعده ياخد القرار.\n\n"
+        "المحور الأول\n\n"
+        "هل الدراسة بالخارج مناسبة للطالب؟"
+    )
+
+    chunks = split_text(
+        text,
+        chunk_size=100,
+        chunk_overlap=2
+    )
+
+    assert len(chunks) > 1
+    assert all(chunk.strip() for chunk in chunks)

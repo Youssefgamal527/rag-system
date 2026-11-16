@@ -144,3 +144,55 @@ def test_ingest_pdf_file_not_found(pipeline):
 
     with pytest.raises(FileNotFoundError):
         ingestion_pipeline.ingest_pdf("nonexistent.pdf")
+
+def test_reingesting_pdf_replaces_old_chunks(
+    pipeline,
+    sample_pdf,
+    tmp_path
+):
+    ingestion_pipeline, vector_store = pipeline
+
+    # First ingestion
+    first_result = ingestion_pipeline.ingest_pdf(sample_pdf)
+
+    first_count = vector_store.client.count(
+        collection_name=vector_store.collection_name,
+        exact=True
+    ).count
+
+    assert first_count == first_result["chunks"]
+
+    # Create an updated PDF with the same filename
+    updated_path = tmp_path / "updated" / "sample.pdf"
+    updated_path.parent.mkdir()
+
+    pdf = canvas.Canvas(str(updated_path))
+
+    pdf.drawString(
+        100,
+        750,
+        "Updated document with completely new content."
+    )
+
+    pdf.save()
+
+    # Second ingestion
+    second_result = ingestion_pipeline.ingest_pdf(
+        str(updated_path)
+    )
+
+    stored_chunks = vector_store.get_all_chunks()
+
+    # Only the updated source chunks should remain
+    assert len(stored_chunks) == second_result["chunks"]
+
+    assert all(
+        chunk["metadata"]["source"] == "sample.pdf"
+        for chunk in stored_chunks
+    )
+
+    assert all(
+        "Updated document" in chunk["text"]
+        for chunk in stored_chunks
+    )
+        

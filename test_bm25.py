@@ -54,11 +54,31 @@ def test_tokenize_supports_arabic_and_english():
     assert "الدراسية" in tokens
 
 
-def test_index_documents_rejects_empty_list():
+def test_index_documents_clears_index_when_empty():
+
     retriever = BM25Retriever()
 
-    with pytest.raises(ValueError):
-        retriever.index_documents([])
+    chunks = [
+        {
+            "text": "Artificial intelligence and machine learning",
+            "metadata": {
+                "source": "test.pdf",
+                "page": 1
+            }
+        }
+    ]
+
+    # Build the initial index
+    retriever.index_documents(chunks)
+
+    assert retriever.bm25 is not None
+    assert len(retriever.documents) == 1
+
+    # Clear the index
+    retriever.index_documents([])
+
+    assert retriever.bm25 is None
+    assert retriever.documents == []
 
 
 def test_search_rejects_uninitialized_index():
