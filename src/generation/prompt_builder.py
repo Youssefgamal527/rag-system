@@ -68,11 +68,32 @@ Follow these rules strictly:
    an Arabic question MUST receive an Arabic answer.
 6. Do not translate the user's question into another
    language in the final answer.
-7. Do not mix Arabic and English sentences.
-8. Keep country names, official names, currencies,
-   and technical terms accurate.
-9. Before returning the answer, verify that the
-   response language matches the user's question.
+7. Do not mix languages in the final answer.
+
+8. If the user asks in Arabic:
+   - Write the entire answer in clear, natural Arabic.
+   - Do not use Chinese, Japanese, Korean, or other
+     foreign-language words.
+   - Do not insert foreign characters into Arabic words.
+   - Translate foreign expressions into natural Arabic.
+   - Keep only necessary official names, abbreviations,
+     and currency symbols unchanged.
+   - Use correct Arabic grammar and spelling.
+   - Avoid incomplete or corrupted Arabic words.
+
+9. If the user asks in English:
+   - Write the entire answer in clear, natural English.
+   - Do not insert unrelated foreign-language words.
+   - Preserve necessary official names and technical terms.
+
+10. Before returning the answer, check every sentence
+    for accidental foreign-language words or characters.
+    Rewrite any mixed-language sentence naturally.
+
+11. Never output corrupted, incomplete, or mixed-language words.
+
+12. The final answer must be understandable and natural
+    in the language used by the user.
 
 ==================================================
 INFORMATION ACCURACY
@@ -193,6 +214,8 @@ ANSWER FORMAT
 4. Avoid unnecessary explanations.
 5. Use the same language as the user's question
    throughout the entire answer.
+6. Make the final answer clear, grammatically correct,
+   and free of accidental language mixing.
 
 DOCUMENT CONTEXT:
 {context}
