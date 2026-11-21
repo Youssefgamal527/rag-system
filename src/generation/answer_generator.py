@@ -1,4 +1,5 @@
-import json
+
+import re
 
 
 class AnswerGenerator:
@@ -10,50 +11,53 @@ class AnswerGenerator:
         "المجر": ["المجر", "هنغاريا", "hungary"],
         "بولندا": ["بولندا", "poland"],
         "تركيا": ["تركيا", "turkey"],
-        "جورجيا": ["جورجيا", "georgia"]
+        "جورجيا": ["جورجيا", "georgia"],
     }
 
     MONTHLY_TERMS = [
-        "معيشة شهريا",
         "المعيشة شهريا",
+        "المعيشة شهرياً",
         "المعيشة الشهرية",
-        "مصاريف المعيشة",
+        "تكلفة المعيشة",
+        "المصاريف الشهرية",
         "تكاليف المعيشة",
+        "living cost",
+        "monthly cost",
+        "per month",
         "monthly living",
         "living expenses",
-        "living costs"
+    ]
+
+    CASUAL_MONTHLY_TERMS = [
+        "محتاج كام كل شهر", "أحتاج كام كل شهر",
+        "محتاج كام شهريا", "اصرف كام شهريا",
+        "أصرف كام شهريا", "كام هصرف في الشهر",
+        "تكفيني كام شهريا", "المصاريف في الشهر",
+        "كل شهر عشان اعيش", "شهريا عشان اعيش",
+        "كل شهر", "شهريا", "شهرياً", "في الشهر",
     ]
 
     TOTAL_BUDGET_TERMS = [
-        "السنة الأولى كاملة",
-        "إجمالي الميزانية",
-        "إجمالي التكلفة",
-        "إجمالي ميزانية",
-        "ميزانية الدراسة والمعيشة",
-        "التكلفة الكاملة",
-        "التكلفة الإجمالية",
-        "total budget",
-        "first year"
+        "الميزانية الكلية", "التكلفة الكلية",
+        "التكلفة الإجمالية", "اجمالي التكلفة",
+        "إجمالي التكلفة", "total budget",
+        "total cost", "first year cost",
     ]
 
     PRIVATE_TUITION_TERMS = [
-        "الجامعات الخاصة",
-        "جامعة خاصة",
-        "رسوم الجامعات الخاصة",
+        "الجامعات الخاصة", "جامعة خاصة",
+        "الجامعة الخاصة", "رسوم الجامعات الخاصة",
         "مصاريف الجامعات الخاصة",
-        "private universities",
-        "private university",
-        "private tuition"
+        "private university", "private universities",
+        "private tuition",
     ]
 
     PUBLIC_TUITION_TERMS = [
-        "الجامعات الحكومية",
-        "جامعة حكومية",
-        "رسوم الجامعات الحكومية",
+        "الجامعات الحكومية", "جامعة حكومية",
+        "الجامعة الحكومية", "رسوم الجامعات الحكومية",
         "مصاريف الجامعات الحكومية",
-        "public universities",
-        "public university",
-        "public tuition"
+        "public university", "public universities",
+        "public tuition",
     ]
 
     def __init__(
@@ -70,120 +74,134 @@ class AnswerGenerator:
         self.budget_extractor = budget_extractor
         self.budget_calculator = budget_calculator
 
-    def _detect_countries(self, query: str) -> list[str]:
-        query_lower = query.lower()
+    @staticmethod
+    def _contains_term(query, terms):
+        query = query.lower()
+        return any(term.lower() in query for term in terms)
 
-        return [
-            country
-            for country, aliases in self.COUNTRY_ALIASES.items()
-            if any(alias in query_lower for alias in aliases)
-        ]
+    def _detect_countries(self, query):
+        found = []
 
-    def _contains_term(self, query: str, terms: list[str]) -> bool:
-        query_lower = query.lower()
-        return any(term in query_lower for term in terms)
+        for country, aliases in self.COUNTRY_ALIASES.items():
+            if any(
+                alias.lower() in query.lower()
+                for alias in aliases
+            ):
+                found.append(country)
 
-    def _is_monthly_living_query(self, query: str) -> bool:
-        return self._contains_term(query, self.MONTHLY_TERMS)
+        return found
 
-    def _is_total_budget_query(self, query: str) -> bool:
-        return self._contains_term(query, self.TOTAL_BUDGET_TERMS)
+    def _is_monthly_living_query(self, query):
+        return (
+            self._contains_term(query, self.MONTHLY_TERMS)
+            or self._contains_term(
+                query,
+                self.CASUAL_MONTHLY_TERMS
+            )
+        )
 
-    def _is_private_tuition_query(self, query: str) -> bool:
-        return self._contains_term(query, self.PRIVATE_TUITION_TERMS)
+    def _is_total_budget_query(self, query):
+        return self._contains_term(
+            query,
+            self.TOTAL_BUDGET_TERMS
+        )
 
-    def _is_public_tuition_query(self, query: str) -> bool:
-        return self._contains_term(query, self.PUBLIC_TUITION_TERMS)
+    def _is_private_tuition_query(self, query):
+        return self._contains_term(
+            query,
+            self.PRIVATE_TUITION_TERMS
+        )
 
-    def _unique_chunks(self, chunks: list[dict]) -> list[dict]:
-        unique = []
-        seen_ids = set()
+    def _is_public_tuition_query(self, query):
+        return self._contains_term(
+            query,
+            self.PUBLIC_TUITION_TERMS
+        )
+
+    @staticmethod
+    def _unique_chunks(chunks):
+        results = []
+        seen = set()
 
         for chunk in chunks:
-            chunk_id = chunk.get("chunk_id")
+            key = chunk.get("chunk_id") or chunk.get("text", "")
 
-            if chunk_id is None:
-                unique.append(chunk)
-            elif chunk_id not in seen_ids:
-                seen_ids.add(chunk_id)
-                unique.append(chunk)
+            if key in seen:
+                continue
 
-        return unique
+            seen.add(key)
+            results.append(chunk)
 
-    def _filter_country_rows(
-        self,
-        countries: list[str],
-        chunks: list[dict]
-    ) -> list[dict]:
+        return results
 
-        selected = []
-
-        for country in countries:
-            aliases = self.COUNTRY_ALIASES[country]
-
-            for chunk in chunks:
-                text = chunk.get("text", "")
-                text_lower = text.lower()
-
-                country_found = any(
-                    alias in text_lower
-                    for alias in aliases
-                )
-
-                if country_found and "الدولة:" in text:
-                    selected.append(chunk)
-
-        return self._unique_chunks(selected)
-
-    def _filter_context(
-        self,
-        query: str,
-        chunks: list[dict]
-    ) -> list[dict]:
-
+    def _filter_country_rows(self, query, chunks):
         countries = self._detect_countries(query)
-
-        if self._is_total_budget_query(query):
-            if "ألمانيا" in countries:
-                relevant_pages = {7, 24, 38}
-
-                selected = [
-                    chunk
-                    for chunk in chunks
-                    if chunk.get("metadata", {}).get("page")
-                    in relevant_pages
-                ]
-
-                return self._unique_chunks(selected) if selected else chunks
-
-            return chunks
 
         if not countries:
             return chunks
 
-        if (
-            self._is_private_tuition_query(query)
-            or self._is_public_tuition_query(query)
-        ):
-            selected = self._filter_country_rows(countries, chunks)
-            return selected if selected else chunks
+        selected = []
 
-        if self._is_monthly_living_query(query):
-            selected = self._filter_country_rows(countries, chunks)
-            return selected if selected else chunks
+        for chunk in chunks:
+            text = chunk.get("text", "").lower()
 
-        return chunks
+            if any(
+                alias.lower() in text
+                for country in countries
+                for alias in self.COUNTRY_ALIASES[country]
+            ):
+                selected.append(chunk)
 
-    def _build_budget_estimates(
-        self,
-        query: str,
-        chunks: list[dict]
-    ) -> dict | None:
+        return selected or chunks
 
-        countries = self._detect_countries(query)
+    def _filter_context(self, query, chunks):
+        chunks = self._unique_chunks(chunks)
+
+        is_monthly = self._is_monthly_living_query(query)
+        is_private = self._is_private_tuition_query(query)
+        is_public = self._is_public_tuition_query(query)
+        is_budget = self._is_total_budget_query(query)
+
+        # الأسئلة غير الشهرية:
+        # نفلتر حسب الدولة فقط في أسئلة الرسوم والميزانية.
+        if not is_monthly:
+            if is_private or is_public or is_budget:
+                return self._filter_country_rows(query, chunks)
+
+            return chunks
+
+        # اختيار بيانات المعيشة الشهرية.
+        monthly_chunks = [
+            chunk for chunk in chunks
+            if any(
+                term in chunk.get("text", "").lower()
+                for term in [
+                    "المعيشة",
+                    "شهريا",
+                    "شهرياً",
+                    "شهري",
+                    "monthly",
+                    "living cost",
+                    "living expenses",
+                ]
+            )
+        ]
+
+        if monthly_chunks:
+            chunks = monthly_chunks
+
+        return self._filter_country_rows(query, chunks)
+
+    # ==========================================
+    # Budget calculation
+    # ==========================================
+
+    def _build_budget_estimates(self, query, chunks):
 
         if not self._is_total_budget_query(query):
             return None
+
+        countries = self._detect_countries(query)
 
         if "ألمانيا" not in countries:
             return None
@@ -196,11 +214,16 @@ class AnswerGenerator:
             country="ألمانيا"
         )
 
+        if not extracted:
+            return None
+
         living = extracted.get("monthly_living")
         public_fees = extracted.get(
             "annual_public_semester_contribution"
         )
-        private_tuition = extracted.get("annual_private_tuition")
+        private_tuition = extracted.get(
+            "annual_private_tuition"
+        )
 
         if not living or not public_fees or not private_tuition:
             return None
@@ -237,83 +260,298 @@ class AnswerGenerator:
             "extraction_sources": extracted["sources"]
         }
 
-    def _format_budget_answer(self, budget: dict) -> str:
+    # ==========================================
+    # Tuition extraction
+    # ==========================================
 
-        currency = budget.get("currency", "EUR")
+    def _build_tuition_estimate(self, query, chunks):
 
-        def format_range(values):
-            minimum = values["min"]
-            maximum = values["max"]
-            return f"{minimum:,.0f} - {maximum:,.0f} {currency}"
+        is_private = self._is_private_tuition_query(query)
+        is_public = self._is_public_tuition_query(query)
 
-        public = budget["public_university"]
-        private = budget["private_university"]
+        if not is_private and not is_public:
+            return None
 
-        return f"""
-إجمالي ميزانية السنة الأولى للدراسة والمعيشة في {budget['country']}:
+        countries = self._detect_countries(query)
+        results = []
 
-**أولًا: الجامعات الحكومية**
+        for chunk in chunks:
+            text = chunk.get("text", "")
+            lower = text.lower()
 
-- مصروفات المعيشة السنوية:
-  {format_range(public['annual_living'])}
+            if countries and not any(
+                alias.lower() in lower
+                for country in countries
+                for alias in self.COUNTRY_ALIASES[country]
+            ):
+                continue
 
-- الرسوم الدراسية السنوية:
-  {format_range(public['annual_tuition'])}
+            private = any(
+                term.lower() in lower
+                for term in self.PRIVATE_TUITION_TERMS
+            )
 
-- الرسوم الإلزامية السنوية:
-  {format_range(public['annual_mandatory_fees'])}
+            public = any(
+                term.lower() in lower
+                for term in self.PUBLIC_TUITION_TERMS
+            )
 
-- إجمالي ميزانية السنة الأولى:
-  {format_range(public['partial_first_year_total'])}
+            if is_private and not private:
+                continue
 
-**ثانيًا: الجامعات الخاصة**
+            if is_public and not public:
+                continue
 
-- مصروفات المعيشة السنوية:
-  {format_range(private['annual_living'])}
+            metadata = chunk.get("metadata", {})
 
-- الرسوم الدراسية السنوية:
-  {format_range(private['annual_tuition'])}
+            results.append({
+                "text": text,
+                "source": metadata.get("source"),
+                "page": metadata.get("page"),
+            })
 
-- الرسوم الإلزامية السنوية:
-  {format_range(private['annual_mandatory_fees'])}
+        return results or None
 
-- إجمالي ميزانية السنة الأولى:
-  {format_range(private['partial_first_year_total'])}
+    def _format_tuition_answer(self, estimate):
 
-ملاحظة: هذه تقديرات أساسية، ولا تشمل المصروفات الإضافية غير المحتسبة أو تذاكر السفر. وقد تختلف الرسوم في بعض الجامعات الحكومية حسب الولاية والبرنامج الدراسي.
-""".strip()
+        lines = ["معلومات الرسوم الدراسية:"]
 
-    def _build_budget_prompt(
-        self,
-        prompt: str,
-        budget_estimates: dict
-    ) -> str:
+        for item in estimate:
+            lines.append(item["text"])
 
-        budget_context = json.dumps(
-            budget_estimates,
-            ensure_ascii=False,
-            indent=2
+            if item.get("source"):
+                lines.append(
+                    f"المصدر: {item['source']} "
+                    f"- صفحة {item.get('page')}"
+                )
+
+        return "\n".join(lines)
+
+    # ==========================================
+    # Budget formatting
+    # ==========================================
+
+    @staticmethod
+    def _format_range(data):
+        return (
+            f"{data['min']:,.0f} - "
+            f"{data['max']:,.0f}"
         )
 
-        return prompt + f"""
+    def _format_budget_answer(self, estimates):
 
-==================================================
-CALCULATED BUDGET DATA
-==================================================
+        if not isinstance(estimates, dict):
+            return str(estimates)
 
-{budget_context}
+        currency = estimates.get("currency", "EUR")
 
-Use the calculated data only for financial questions.
-Do not modify or invent financial values.
-Answer in the same language as the user's question.
-"""
+        lines = [
+            "الميزانية السنوية التقديرية للدراسة في ألمانيا:",
+            "",
+            "أولاً: الجامعة الحكومية",
+        ]
+
+        public = estimates["public_university"]
+
+        lines.append(
+            "المعيشة السنوية: "
+            + self._format_range(public["annual_living"])
+            + f" {currency}"
+        )
+
+        lines.append(
+            "المساهمات والرسوم الإلزامية: "
+            + self._format_range(
+                public["annual_mandatory_fees"]
+            )
+            + f" {currency}"
+        )
+
+        lines.append(
+            "إجمالي السنة الأولى: "
+            + self._format_range(
+                public["partial_first_year_total"]
+            )
+            + f" {currency}"
+        )
+
+        lines.extend([
+            "",
+            "ثانياً: الجامعة الخاصة",
+        ])
+
+        private = estimates["private_university"]
+
+        lines.append(
+            "المعيشة السنوية: "
+            + self._format_range(private["annual_living"])
+            + f" {currency}"
+        )
+
+        lines.append(
+            "الرسوم الدراسية السنوية: "
+            + self._format_range(private["annual_tuition"])
+            + f" {currency}"
+        )
+
+        lines.append(
+            "إجمالي السنة الأولى: "
+            + self._format_range(
+                private["partial_first_year_total"]
+            )
+            + f" {currency}"
+        )
+
+        lines.extend([
+            "",
+            "ملاحظة: الأرقام تقديرية وتعتمد على البيانات "
+            "المستخرجة من المستندات."
+        ])
+
+        return "\n".join(lines)
+
+    # ==========================================
+    # Monthly comparison
+    # ==========================================
+
+    def _extract_monthly_country_data(self, chunks):
+
+        results = []
+        seen_countries = set()
+
+        for chunk in chunks:
+            text = chunk.get("text", "")
+
+            if "الدولة:" not in text:
+                continue
+
+            country = None
+
+            for name, aliases in self.COUNTRY_ALIASES.items():
+                if any(
+                    alias.lower() in text.lower()
+                    for alias in aliases
+                ):
+                    country = name
+                    break
+
+            if not country or country in seen_countries:
+                continue
+
+            match = re.search(
+                r"(\d[\d,]*(?:\.\d+)?)\s*[-–—]\s*"
+                r"(\d[\d,]*(?:\.\d+)?)",
+                text
+            )
+
+            if not match:
+                continue
+
+            minimum = float(
+                match.group(1).replace(",", "")
+            )
+
+            maximum = float(
+                match.group(2).replace(",", "")
+            )
+
+            if minimum > maximum:
+                continue
+
+            lower = text.lower()
+
+            if "يورو" in lower or "eur" in lower:
+                currency = "EUR"
+            elif "دولار" in lower or "usd" in lower:
+                currency = "USD"
+            else:
+                currency = None
+
+            metadata = chunk.get("metadata", {})
+
+            results.append({
+                "country": country,
+                "min": minimum,
+                "max": maximum,
+                "currency": currency,
+                "source": metadata.get("source"),
+                "page": metadata.get("page"),
+            })
+
+            seen_countries.add(country)
+
+        return results
+
+    def _format_monthly_comparison(self, data):
+
+        if len(data) < 2:
+            return ""
+
+        currencies = {
+            item["currency"] for item in data
+        }
+
+        lines = [
+            "مقارنة تكاليف المعيشة الشهرية:"
+        ]
+
+        for item in data:
+
+            if item["currency"]:
+                amount = (
+                    f"{item['min']:,.0f} - "
+                    f"{item['max']:,.0f} "
+                    f"{item['currency']}"
+                )
+            else:
+                amount = "العملة غير محددة في المصدر"
+
+            lines.append(
+                f"- {item['country']}: {amount}"
+            )
+
+        if None in currencies:
+            lines.append(
+                "بعض البيانات لا تحدد العملة، "
+                "لذلك لا يمكن إجراء مقارنة مالية كاملة."
+            )
+
+        elif len(currencies) > 1:
+            lines.append(
+                "البيانات تستخدم عملات مختلفة، "
+                "ولا يمكن ترتيب الدول دون تحويل العملات."
+            )
+
+        else:
+            lowest = min(
+                data,
+                key=lambda item: item["min"]
+            )
+
+            lines.append(
+                f"أقل حد أدنى في البيانات هو "
+                f"{lowest['country']} بقيمة "
+                f"{lowest['min']:,.0f} "
+                f"{lowest['currency']} شهرياً."
+            )
+
+            lines.append(
+                "قد تتداخل نطاقات التكاليف، "
+                "لذلك لا يمكن الجزم بأنها الأرخص في كل الحالات."
+            )
+
+        return "\n".join(lines)
+
+    # ==========================================
+    # Main generation
+    # ==========================================
 
     def generate(
         self,
-        query: str,
-        limit: int = 10,
-        retrieval_limit: int = 20
-    ) -> dict:
+        query,
+        limit=10,
+        retrieval_limit=20
+    ):
 
         if not query or not query.strip():
             raise ValueError("Query cannot be empty")
@@ -326,10 +564,14 @@ Answer in the same language as the user's question.
 
         if not retrieved_chunks:
             return {
-                "answer": "No relevant information was found in the documents.",
+                "answer": (
+                    "No relevant information was found "
+                    "in the documents."
+                ),
                 "sources": [],
                 "retrieved_chunks": [],
-                "budget_estimates": None
+                "budget_estimates": None,
+                "tuition_estimate": None,
             }
 
         selected_chunks = self._filter_context(
@@ -342,19 +584,56 @@ Answer in the same language as the user's question.
             chunks=selected_chunks
         )
 
+        tuition_estimate = None
+
+        if not budget_estimates:
+            tuition_estimate = self._build_tuition_estimate(
+                query=query,
+                chunks=selected_chunks
+            )
+
+        monthly_comparison = None
+
+        if self._is_monthly_living_query(query):
+
+            monthly_data = self._extract_monthly_country_data(
+                selected_chunks
+            )
+
+            monthly_comparison = self._format_monthly_comparison(
+                monthly_data
+            )
+
         if budget_estimates:
-            answer = self._format_budget_answer(budget_estimates)
+
+            answer = self._format_budget_answer(
+                budget_estimates
+            )
+
+        elif tuition_estimate:
+
+            answer = self._format_tuition_answer(
+                tuition_estimate
+            )
+
+        elif monthly_comparison:
+
+            answer = monthly_comparison
+
         else:
+
             prompt = self.prompt_builder.build(
                 query=query,
                 retrieved_chunks=selected_chunks
             )
+
             answer = self.llm.generate(prompt)
 
         sources = []
         seen_sources = set()
 
         for chunk in selected_chunks:
+
             metadata = chunk.get("metadata", {})
 
             source = metadata.get("source")
@@ -362,19 +641,21 @@ Answer in the same language as the user's question.
 
             source_key = (source, page)
 
-            if source_key not in seen_sources and (
-                source is not None or page is not None
+            if (
+                source_key not in seen_sources
+                and (source is not None or page is not None)
             ):
                 seen_sources.add(source_key)
 
                 sources.append({
                     "source": source,
-                    "page": page
+                    "page": page,
                 })
 
         return {
             "answer": answer,
             "sources": sources,
             "retrieved_chunks": selected_chunks,
-            "budget_estimates": budget_estimates
+            "budget_estimates": budget_estimates,
+            "tuition_estimate": tuition_estimate,
         }

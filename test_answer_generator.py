@@ -43,23 +43,34 @@ def sample_chunks():
         {
             "chunk_id": "germany_001",
             "text": (
-                "رسوم الجامعات الخاصة سنوياً: "
-                "9,000 – 14,000 يورو | الدولة: ألمانيا"
+                "معيشة شهريا: 850 – 1,100 يورو "
+                "| الدولة: ألمانيا"
             ),
             "metadata": {"source": "guide.pdf", "page": 38}
         },
         {
-            "chunk_id": "europe_001",
+            "chunk_id": "spain_001",
             "text": (
-                "تتراوح رسوم الجامعات الخاصة في أوروبا "
-                "بين 8,000 و25,000 يورو."
+                "معيشة شهريا: 900 – 1,360 يورو "
+                "| الدولة: إسبانيا"
             ),
-            "metadata": {"source": "guide.pdf", "page": 7}
+            "metadata": {"source": "guide.pdf", "page": 38}
         },
         {
-            "chunk_id": "other_001",
-            "text": "معلومات عن شروط القبول والتأشيرة.",
-            "metadata": {"source": "guide.pdf", "page": 5}
+            "chunk_id": "italy_001",
+            "text": (
+                "معيشة شهريا: 700 – 1,700 يورو "
+                "| الدولة: إيطاليا"
+            ),
+            "metadata": {"source": "guide.pdf", "page": 38}
+        },
+        {
+            "chunk_id": "poland_001",
+            "text": (
+                "معيشة شهريا: 330 – 900 يورو "
+                "| الدولة: بولندا"
+            ),
+            "metadata": {"source": "guide.pdf", "page": 38}
         }
     ]
 
@@ -95,6 +106,19 @@ def test_monthly_living_query_detection(generator):
         "ما هي رسوم الجامعات الخاصة في ألمانيا؟"
     )
 
+
+def test_casual_monthly_query_detection(generator):
+    assert generator._is_monthly_living_query(
+        "محتاج كام كل شهر عشان أعيش في ألمانيا؟"
+    )
+
+
+def test_monthly_comparison_query_detection(generator):
+    query = "إيه أرخص دولة من ناحية المعيشة الشهرية؟"
+
+    assert generator._is_monthly_living_query(query)
+
+
 def test_filter_context_preserves_chunks_for_unrelated_query(
     generator,
     sample_chunks
@@ -106,6 +130,7 @@ def test_filter_context_preserves_chunks_for_unrelated_query(
 
     assert result == sample_chunks
 
+
 def test_filter_context_selects_germany_private_tuition_only(
     generator,
     sample_chunks
@@ -116,13 +141,35 @@ def test_filter_context_selects_germany_private_tuition_only(
     )
 
     assert len(result) == 1
-
     assert result[0]["chunk_id"] == "germany_001"
+    assert "الدولة: ألمانيا" in result[0]["text"]
 
-    assert "9,000" in result[0]["text"]
-    assert "14,000" in result[0]["text"]
+
+def test_filter_context_selects_only_compared_countries(
+    generator,
+    sample_chunks
+):
+    query = (
+        "قارن المعيشة الشهرية في ألمانيا وإسبانيا وإيطاليا"
+    )
+
+    result = generator._filter_context(query, sample_chunks)
+
+    result_ids = {
+        chunk["chunk_id"] for chunk in result
+    }
+
+    assert result_ids == {
+        "germany_001",
+        "spain_001",
+        "italy_001"
+    }
+
+    assert "poland_001" not in result_ids
+
+
 def test_total_budget_query_is_not_treated_as_tuition_only(generator):
     query = "ما إجمالي ميزانية الدراسة والمعيشة في ألمانيا؟"
 
     assert not generator._is_monthly_living_query(query)
-    assert generator._detect_countries(query) == ["ألمانيا"]    
+    assert generator._detect_countries(query) == ["ألمانيا"]
